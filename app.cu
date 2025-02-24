@@ -1,54 +1,51 @@
+#include <iostream>
+#include <cuda_runtime.h>
+#include <device_launch_parameters.h>
 #include <stdio.h>
+#include <chrono>
+using namespace std::chrono;
 
-__global__ void matrixmulkernel(float* M, float* N, float* P, int width) {
-    int row = blockIdx.y * blockDim.y + threadIdx.y;
-    int col = blockIdx.x * blockDim.x + threadIdx.x;
-    if (row < width && col < width) {
-        float Pvalue = 0;
-        for (int k = 0; k < width; k++) {
-            Pvalue += M[row * width + k] * N[k * width + col];
-        }
-        P[row * width + col] = Pvalue;
-    }
-}
 
 int main() {
-    int width = 3;
-    float M[width][width], N[width][width], P[width][width];
-    float *Md, *Nd, *Pd;
-    int size = width * width * sizeof(float);
+    cudaDeviceProp devProp;
+    int devCount;
 
-    for (int i = 0; i < width; i++) {
-        for (int j = 0; j < width; j++) {
-            M[i][j] = 2;
-            N[i][j] = 4;
-        }
+    // Get the number of CUDA devices
+    cudaError_t error_id = cudaGetDeviceCount(&devCount);
+    if (error_id != cudaSuccess) {
+        std::cerr << "Error: cudaGetDeviceCount returned " << error_id << std::endl;
+        std::cerr << "  " << cudaGetErrorString(error_id) << std::endl;
+        return 1; // Indicate failure
     }
 
-    cudaMalloc((void**)&Md, size);
-    cudaMalloc((void**)&Nd, size);
-    cudaMalloc((void**)&Pd, size);
-
-    cudaMemcpy(Md, M, size, cudaMemcpyHostToDevice);
-    cudaMemcpy(Nd, N, size, cudaMemcpyHostToDevice);
-
-    dim3 dimBlock(width, width);
-    dim3 dimGrid(1, 1);
-
-    matrixmulkernel<<<dimGrid, dimBlock>>>(Md, Nd, Pd, width);
-
-    cudaMemcpy(P, Pd, size, cudaMemcpyDeviceToHost);
-
-    for (int i = 0; i < width; i++) {
-        for (int j = 0; j < width; j++) {
-            printf("%f ", P[i][j]);
-        }
-        printf("\n");
+    // Check if any devices were found
+    if (devCount == 0) {
+        std::cout << "No CUDA-capable devices found." << std::endl;
+        return 0; // No error, just no devices
     }
 
-    cudaFree(Md);
-    cudaFree(Nd);
-    cudaFree(Pd);
+    std::cout << "Number of CUDA devices: " << devCount << std::endl;
 
-    return 0;
+    // Get properties for each device
+    for (int i = 0; i < devCount; ++i) {
+        error_id = cudaGetDeviceProperties(&devProp, i);
+        if (error_id != cudaSuccess) {
+            std::cerr << "Error: cudaGetDeviceProperties (device " << i << ") returned " << error_id << std::endl;
+            std::cerr << "  " << cudaGetErrorString(error_id) << std::endl;
+            continue; // Try the next device, or return 1; if you want to stop at the first error
+        }
+
+        std::cout << "\nDevice " << i << ": " << devProp.name << std::endl;
+        std::cout << "  Compute Capability: " << devProp.major << "." << devProp.minor << std::endl;
+        std::cout << "  Total Global Memory: " << devProp.totalGlobalMem / (1024 * 1024) << " MB" << std::endl; // Convert to MB
+        std::cout << "  Multiprocessors: " << devProp.multiProcessorCount << std::endl;
+        std::cout << "  Warp Size: " << devProp.warpSize << std::endl;
+        std::cout << "  Max Threads Per Block: " << devProp.maxThreadsPerBlock << std::endl;
+        std::cout << "  Clock Rate: " << devProp.clockRate / 1000 << " MHz" << std::endl;
+        std::cout << "  Memory Clock Rate: " << devProp.memoryClockRate / 1000 << " MHz" << std::endl;
+        std::cout << "  Total Constant Memory: " << devProp.totalConstMem / 1024 << " KB" << std::endl; // Convert to KB
+        std::cout << "  Shared Memory Per Block: " << devProp.sharedMemPerBlock / 1024 << " KB" << std::endl; //Convert to KB
+    }
+
+    return 0; // Indicate success
 }
